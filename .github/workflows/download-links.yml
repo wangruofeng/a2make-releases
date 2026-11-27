@@ -1,0 +1,70 @@
+name: Sync DMG download links
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Update release notes and latest download
+        shell: python
+        run: |
+          import base64
+          import json
+          import os
+          import re
+          import subprocess
+          from urllib.parse import quote
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          prefix = f"repos/{repo}/"
+
+          def api(path, method="GET", **fields):
+              cmd = ["gh", "api", prefix + path, "--method", method]
+              if fields:
+                  cmd.extend(["--input", "-"])
+              return json.loads(subprocess.check_output(cmd, input=json.dumps(fields).encode()))
+
+          def intro(release):
+              version = release["tag_name"].removeprefix("v")
+              filename = f"a2make-{version}-arm64.dmg"
+              asset, = [a for a in release["assets"] if a["name"] == filename and a["state"] == "uploaded"]
+              return (f"**[下载 A2Make {version} 安装包（Apple Silicon Mac，DMG）]({asset['browser_download_url']})**\n\n"
+                      "手动安装只需下载上面的 DMG。双击打开后，将 A2Make 拖入「应用程序」。"
+                      "其余文件供自动更新、脚本安装或校验使用，手动安装时无需下载。")
+
+          # Recognize the existing download block, including releases predating this workflow.
+          def strip_intro(text):
+              return re.sub(r"\A\*\*\[下载 A2Make [^\n]+\*\*\n\n手动安装只需下载上面的 DMG。[^\n]*\n*", "", text, count=1)
+
+          release = api("releases/tags/" + quote(os.environ["TAG"], safe=""))
+          if release["draft"]:
+              raise ValueError("Release must be published")
+          body = release["body"] or ""
+          notes = strip_intro(body).removeprefix("### 本版更新\n\n")
+          updated = intro(release) + ("\n\n### 本版更新\n\n" + notes if notes else "")
+          if body != updated:
+              api(f"releases/{release['id']}", "PATCH", body=updated)
+
+          # Read the README revision before resolving latest. Concurrent writes fail the SHA check.
+          readme = api("contents/README.md")
+          latest = api("releases/latest")
+          text = base64.b64decode(readme["content"]).decode()
+          title, _, rest = text.partition("\n")
+          updated = title + "\n\n" + intro(latest) + "\n\n" + strip_intro(rest.lstrip("\n"))
+          if text != updated:
+              api("contents/README.md", "PUT", message=f"更新 {latest['tag_name']} 的 DMG 下载入口",
+                  sha=readme["sha"], content=base64.b64encode(updated.encode()).decode())
