@@ -53,6 +53,12 @@ jobs:
           release = api("releases/tags/" + quote(os.environ["TAG"], safe=""))
           if release["draft"]:
               raise ValueError("Release must be published")
+          def multiplatform(r):
+              return any(a["name"] == "update-windows-amd64.json" for a in r["assets"])
+
+          # The desktop publisher maintains the installation instructions for these releases.
+          if multiplatform(release):
+              raise SystemExit(0)
           body = release["body"] or ""
           notes = strip_intro(body).removeprefix("### 本版更新\n\n")
           updated = intro(release) + ("\n\n### 本版更新\n\n" + notes if notes else "")
@@ -62,6 +68,8 @@ jobs:
           # Read the README revision before resolving latest. Concurrent writes fail the SHA check.
           readme = api("contents/README.md")
           latest = api("releases/latest")
+          if multiplatform(latest):
+              raise SystemExit(0)
           text = base64.b64decode(readme["content"]).decode()
           title, _, rest = text.partition("\n")
           updated = title + "\n\n" + intro(latest) + "\n\n" + strip_intro(rest.lstrip("\n"))
