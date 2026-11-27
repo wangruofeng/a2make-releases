@@ -12,4 +12,10 @@
 
 手动安装只需选择自己的平台。其余附件供自动更新或校验使用。
 
+## 关于 A2Make
+
+A2Make（问舟）是一款多模型 AI 对话与创作工具，可以阅读附件、生成图片和制作可编辑的 PPT。这里提供 macOS、Windows 和 Linux 桌面版的安装包与自动更新文件。
+
+[访问 A2Make 官网](https://a2make.com)
+
 [查看最新发布版本](https://github.com/wangruofeng/a2make-releases/releases/latest)
